@@ -122,7 +122,7 @@ void calc_hash(uint8_t* digest, uint8_t* data, uint64_t len, bool num)
 	auto end = std::chrono::system_clock::now();
 
 	std::chrono::duration<double> elapsed = end - start;
-	std::cout << "Elapsed time: " << elapsed.count() << " s" << std::endl;
+	std::cout << std::endl << "Elapsed time: " << elapsed.count() << " s" << std::endl;
 #endif
 }
 
@@ -132,7 +132,9 @@ void scan_dir_recursive(std::string pkg_directory, std::vector<PKG_ITEM_RECORD_t
 
 	for (const auto& dir_entry : dirIt)
 	{
-		//std::cout << dir_entry.path() << std::endl;
+#if _DEBUG
+		std::cout << std::endl << dir_entry.path() << std::endl;
+#endif
 
 		std::string file_path = GetFixetPath(dir_entry.path().string().substr(dir_entry.path().string().find_first_of("\\") + 1));
 
@@ -150,9 +152,9 @@ void scan_dir_recursive(std::string pkg_directory, std::vector<PKG_ITEM_RECORD_t
 		{
 			// directory
 			pkg_file.flags |= PKG_FILE_DIRECTORY;
-
-			//std::cout << "  directory: " << file_path << std::endl;
-
+#if _DEBUG
+			std::cout << std::endl << "  directory: " << file_path << std::endl;
+#endif
 			// add
 			pkg_file.flags = be32(pkg_file.flags);
 			pkg_files->push_back(pkg_file);
@@ -162,9 +164,9 @@ void scan_dir_recursive(std::string pkg_directory, std::vector<PKG_ITEM_RECORD_t
 			// file
 			pkg_file.flags |= PKG_FILE_RAW;
 			pkg_file.data_size = be64(file_size);
-
-			//std::cout << "  raw data:" << file_path << std::endl;
-
+#if _DEBUG
+			std::cout << std::endl << "  raw data:" << file_path << std::endl;
+#endif
 			// add
 			pkg_file.flags = be32(pkg_file.flags);
 			pkg_files->push_back(pkg_file);
@@ -249,11 +251,12 @@ int pkg_write(PKG_t pkg, std::string directory, std::string pkg_file_name)
 
 	data_offset = 0;
 
-	char* path = new char[1024];
+	char* path = new char[MAX_PATH];
+	std::streamsize len;
 
 	for (std::vector<std::string>::iterator it = file_paths.begin(); it != file_paths.end(); it++)
 	{
-		snprintf(path, 1024, "%s/%s", directory.c_str(), it->c_str());
+		snprintf(path, MAX_PATH, "%s/%s", directory.c_str(), it->c_str());
 
 		if (fs::is_directory(path)) continue;
 
@@ -261,19 +264,24 @@ int pkg_write(PKG_t pkg, std::string directory, std::string pkg_file_name)
 
 		std::ifstream File(path, std::ifstream::in | std::ifstream::binary);
 
-		size_t len = (size_t)fs::file_size(path);
+		uint64_t data_size_align = ALIGN((size_t)fs::file_size(path), 0x10);
 
-		uint64_t data_size_align = ALIGN(len, 0x10);
-
-		char* data = new char[data_size_align];
-		memset(data, 0, data_size_align);
-
-		File.read(data, len);
-
+		char* data = new char[BUFFER_SIZE];
+		memset(data, 0, BUFFER_SIZE);
+		File.clear();
+		File.seekg(0, std::fstream::beg);
 		opkgFile.seekp(pkg_offset + base_offset + data_offset, std::fstream::beg);
 
-		opkgFile.write((const char*)data, data_size_align);
-		opkgFile.flush();
+		do {
+
+			File.read(data, BUFFER_SIZE);
+			File.sync();
+			len = File.gcount();
+
+			opkgFile.write((const char*)data, len);
+			opkgFile.flush();
+
+		} while (len == BUFFER_SIZE);
 
 		data_offset += data_size_align;
 
@@ -328,7 +336,6 @@ int pkg_write(PKG_t pkg, std::string directory, std::string pkg_file_name)
 	SHA1_Init(&ctx_sha1);
 	SHA1_Update(&ctx_sha1, (uint8_t*)&pkg.second_metadata, sizeof(pkg.second_metadata));
 
-	std::streamsize len;
 	uint8_t* buffer = new uint8_t[BUFFER_SIZE];
 	LONG64 llSize = data_offset, llBytes = 0;
 	memset(buffer, 0, BUFFER_SIZE);
@@ -406,7 +413,6 @@ int pkg_write(PKG_t pkg, std::string directory, std::string pkg_file_name)
 	Progress(llBytes, llSize);
 
 	// data hash
-
 	std::cout << std::endl << std::endl << green << "Hash data" << white << std::endl << std::endl;
 
 	SHA_CTX ctx_data;
@@ -484,7 +490,7 @@ int pkg_write(PKG_t pkg, std::string directory, std::string pkg_file_name)
 
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed = end - start;
-	std::cout << std::endl << "Elapsed time: " << elapsed.count() << " s" << std::endl << std::endl;
+	std::cout << std::endl << std::endl << "Elapsed time: " << elapsed.count() << " s" << std::endl << std::endl;
 
 	// write pkg
 	std::cout << green << "PKG built - writing to file" << white << std::endl;

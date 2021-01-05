@@ -105,11 +105,11 @@ int main(int argc, char** argv)
 	std::string app_ver = "0x0100";
 	std::string package_type = "0x5E";
 
-	uint32_t package, appver;
+	uint32_t package = 0x4e, appver = 0x01;
 
 	PKG_t pkg = {};
 
-	std::cout << std::endl << std::endl << green << "pkg_write version 0.3" << white << std::endl << std::endl;
+	std::cout << std::endl << std::endl << green << "pkg_write version 0.3.1" << white << std::endl << std::endl;
 
 	if (argc < 2)
 	{
